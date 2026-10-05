@@ -57,7 +57,7 @@ def run_pipeline():
 
     # Step 4: Recommendation Precomputation
     recommendations, popular_movies, rec_metrics = run_recommendations(
-        transformed_movies, top_k=15, top_popular=50
+        transformed_movies, top_k=100, top_popular=50
     )
 
     # Step 5: Serving Data Layer (DuckDB + Parquet)

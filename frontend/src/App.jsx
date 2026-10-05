@@ -24,7 +24,8 @@ export default function App() {
 
   // No movie is pre-selected: the user searches first, then recommendations are served.
   const [selectedMovie, setSelectedMovie] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
+  const [recommendationsIndian, setRecommendationsIndian] = useState([]);
+  const [recommendationsEnglish, setRecommendationsEnglish] = useState([]);
   const [recLoading, setRecLoading] = useState(false);
   const [recLatency, setRecLatency] = useState(null);
   const [isFallback, setIsFallback] = useState(false);
@@ -68,14 +69,20 @@ export default function App() {
     setError(null);
 
     try {
-      const data = await fetchRecommendations(movie.movie_id, 12);
-      setRecommendations(data.results || []);
+      // Fetch more so we have enough to split into two lists
+      const data = await fetchRecommendations(movie.movie_id, 100);
+      const allRecs = data.results || [];
+      
+      setRecommendationsIndian(allRecs.filter(m => m.movie_id >= 500000).slice(0, 15));
+      setRecommendationsEnglish(allRecs.filter(m => m.movie_id < 500000).slice(0, 15));
+      
       setRecLatency(data.processing_time_ms);
       setIsFallback(data.is_fallback || false);
       setFallbackReason(data.fallback_reason || null);
     } catch (err) {
       console.error('Error fetching recommendations:', err);
-      setRecommendations([]);
+      setRecommendationsIndian([]);
+      setRecommendationsEnglish([]);
       setError(`Failed to retrieve recommendations for ${movie.title}.`);
     } finally {
       setRecLoading(false);
@@ -89,7 +96,8 @@ export default function App() {
 
   const handleNewSearch = () => {
     setSelectedMovie(null);
-    setRecommendations([]);
+    setRecommendationsIndian([]);
+    setRecommendationsEnglish([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => document.getElementById('movie-search-input')?.focus(), 300);
   };
@@ -138,11 +146,22 @@ export default function App() {
           />
           <RecommendationsList
             sourceTitle={selectedMovie.title}
-            recommendations={recommendations}
+            category="Indian Cinema"
+            recommendations={recommendationsIndian}
             loading={recLoading}
             latencyMs={recLatency}
             isFallback={isFallback}
             fallbackReason={fallbackReason}
+            onSelectMovie={handleSelectMovie}
+          />
+          <RecommendationsList
+            sourceTitle={selectedMovie.title}
+            category="International Cinema"
+            recommendations={recommendationsEnglish}
+            loading={recLoading}
+            latencyMs={null} // Don't show latency badge twice
+            isFallback={false} // Don't show fallback alert twice
+            fallbackReason={null}
             onSelectMovie={handleSelectMovie}
           />
         </>

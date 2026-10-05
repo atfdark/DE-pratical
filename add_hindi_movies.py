@@ -1,37 +1,114 @@
 import os
+import csv
+import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import random
+from backend.config import settings
 
-# Map of genres to index
-genres = [
-    "unknown", "Action", "Adventure", "Animation", "Children's", "Comedy",
-    "Crime", "Documentary", "Drama", "Fantasy", "Film-Noir", "Horror",
-    "Musical", "Mystery", "Romance", "Sci-Fi", "Thriller", "War", "Western"
-]
+TMDB_API_KEY = settings.TMDB_API_KEY
+if not TMDB_API_KEY:
+    print("ERROR: TMDB_API_KEY is not set.")
+    exit(1)
 
-movies = [
-    (1683, "3 Idiots (2009)", "25-Dec-2009", "http://us.imdb.com/title/tt1187043/", ["Comedy", "Drama"]),
-    (1684, "Dangal (2016)", "23-Dec-2016", "http://us.imdb.com/title/tt5074352/", ["Action", "Drama"]),
-    (1685, "Sholay (1975)", "15-Aug-1975", "http://us.imdb.com/title/tt0073707/", ["Action", "Adventure"]),
-    (1686, "Lagaan: Once Upon a Time in India (2001)", "15-Jun-2001", "http://us.imdb.com/title/tt0169102/", ["Drama", "Musical"]),
-    (1687, "PK (2014)", "19-Dec-2014", "http://us.imdb.com/title/tt2338151/", ["Comedy", "Drama", "Sci-Fi"])
-]
+# Paths
+movies_csv = "data/raw/ml-latest-small/movies.csv"
+ratings_csv = "data/raw/ml-latest-small/ratings.csv"
 
-u_item_path = "data/raw/ml-100k/u.item"
-u_data_path = "data/raw/ml-100k/u.data"
+# Configure retries
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=1, status_forcelist=[ 500, 502, 503, 504 ])
+session.mount('https://', HTTPAdapter(max_retries=retries))
 
-# Add movies
-with open(u_item_path, "a", encoding="latin-1") as f:
-    for m in movies:
-        flags = ["0"] * 19
-        for g in m[4]:
-            flags[genres.index(g)] = "1"
-        line = f"{m[0]}|{m[1]}|{m[2]}||{m[3]}|{'|'.join(flags)}\n"
-        f.write(line)
+# Fetch Genres
+try:
+    genre_url = f"https://api.themoviedb.org/3/genre/movie/list?api_key={TMDB_API_KEY}&language=en-US"
+    r = session.get(genre_url, timeout=10)
+    genre_map = {g['id']: g['name'] for g in r.json().get('genres', [])}
+    print("Fetched genre map.")
+except Exception as e:
+    print(f"Failed to fetch genres: {e}")
+    # Hardcode TMDB genres just in case
+    genre_map = {28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance", 878: "Sci-Fi", 10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western"}
 
-# Add ratings (50 users, ratings 5 to each movie so they become top rated and popular)
-with open(u_data_path, "a", encoding="latin-1") as f:
-    for m in movies:
-        for user_id in range(1, 51):
-            # user_id \t item_id \t rating \t timestamp
-            f.write(f"{user_id}\t{m[0]}\t5\t881250949\n")
+# Get existing titles
+existing_titles = set()
+if os.path.exists(movies_csv):
+    with open(movies_csv, "r", encoding='utf-8') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if row:
+                existing_titles.add(row[1])
 
-print("Added hindi movies and ratings.")
+movies_to_write = []
+ratings_to_write = []
+
+start_movie_id = 600000
+user_id = 999
+timestamp = int(time.time())
+
+print("Fetching top 2000 Indian Pan-India movies from TMDB...")
+for page in range(1, 101):
+    url = f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=hi|te|ta|kn|ml&sort_by=popularity.desc&page={page}"
+    try:
+        resp = session.get(url, timeout=10)
+        if resp.status_code != 200:
+            print(f"Failed on page {page}")
+            break
+        
+        results = resp.json().get("results", [])
+        if not results:
+            break
+
+        for movie in results:
+            title = movie.get('title', '').replace(',', '')
+            release_date = movie.get('release_date', '')
+            year = release_date[:4] if release_date else ''
+            full_title = f"{title} ({year})" if year else title
+            
+            if full_title in existing_titles:
+                continue
+            
+            existing_titles.add(full_title)
+            
+            genre_ids = movie.get('genre_ids', [])
+            genres = "|".join([genre_map.get(gid, "Unknown") for gid in genre_ids])
+            if not genres:
+                genres = "(no genres listed)"
+                
+            vote_avg = movie.get('vote_average', 5.0)
+            rating_5_scale = max(0.5, min(5.0, round((vote_avg / 2) * 2) / 2))
+            if rating_5_scale == 0:
+                rating_5_scale = 3.0
+                
+            movie_id = start_movie_id
+            start_movie_id += 1
+            
+            movies_to_write.append([movie_id, full_title, genres])
+            
+            for u in range(900, 910):
+                noise = random.choice([-0.5, 0.0, 0.5])
+                final_rating = max(0.5, min(5.0, rating_5_scale + noise))
+                ratings_to_write.append([u, movie_id, final_rating, timestamp])
+                
+        if page % 10 == 0:
+            print(f"Fetched {page} pages...")
+            
+    except Exception as e:
+        print(f"Error on page {page}: {e}")
+        time.sleep(2) # Wait a bit before continuing
+
+print(f"Total movies fetched: {len(movies_to_write)}")
+
+print("Appending to movies.csv...")
+with open(movies_csv, "a", newline='', encoding='utf-8') as f:
+    writer = csv.writer(f)
+    writer.writerows(movies_to_write)
+
+print("Appending to ratings.csv...")
+with open(ratings_csv, "a", newline='', encoding='utf-8') as f:
+    writer = csv.writer(f)
+    writer.writerows(ratings_to_write)
+
+print("Done appending data!")

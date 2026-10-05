@@ -3,6 +3,7 @@ import MovieCard from './MovieCard';
 
 export default function RecommendationsList({
   sourceTitle,
+  category,
   recommendations,
   loading,
   latencyMs,
@@ -20,11 +21,7 @@ export default function RecommendationsList({
   }
 
   if (!recommendations || recommendations.length === 0) {
-    return (
-      <div className="state-container">
-        <p>No recommendations available for this movie.</p>
-      </div>
-    );
+    return null; // Return nothing instead of state-container to avoid double empty states
   }
 
   return (
@@ -32,6 +29,7 @@ export default function RecommendationsList({
       <div className="section-header">
         <h2 className="section-title">
           <span>Because you searched <em className="row-source">{sourceTitle}</em></span>
+          {category && <span style={{ marginLeft: '10px', opacity: 0.8 }}>({category})</span>}
           <span className="row-subtitle">Precomputed TF-IDF + Cosine Similarity</span>
         </h2>
 

@@ -39,12 +39,14 @@ def clean_movies(raw_movies: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
 
     # Deduplicate by movie_id
     df = raw_movies.drop_duplicates(subset=["movie_id"]).copy()
-    dedup_count = initial_count - len(df)
-    if dedup_count > 0:
-        logger.info(f"Removed {dedup_count} duplicate movie records")
-
-    # Clean title
+    
+    # Clean title first before deduplicating by title
     df["title"] = df["title"].apply(clean_title)
+    
+    # Deduplicate by title to remove API pagination dupes
+    df = df.drop_duplicates(subset=["title"]).copy()
+    
+    dedup_count = initial_count - len(df)
 
     # Extract release year
     df["release_year"] = df.apply(

@@ -105,4 +105,4 @@ class HealthResponse(BaseModel):
 class RecommendRequest(BaseModel):
     movie_id: Optional[int] = Field(None, description="Source movie ID to get recommendations for", examples=[1])
     title: Optional[str] = Field(None, description="Optional title lookup if ID unknown", examples=["Star Wars"])
-    top_k: int = Field(10, description="Number of recommendations requested", ge=1, le=50, examples=[10])
+    top_k: int = Field(10, description="Number of recommendations requested", ge=1, le=100, examples=[10])

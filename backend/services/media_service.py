@@ -64,6 +64,9 @@ def parse_movielens_title(raw: str) -> Dict:
     return {"year": year, "candidates": unique}
 
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 class MediaService:
     def __init__(self):
         self.cache_dir: Path = settings.PARQUET_DIR / "tmdb_cache"
@@ -71,7 +74,13 @@ class MediaService:
         self.meta_file: Path = self.cache_dir / "metadata.json"
         self.image_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        
         self._session = requests.Session()
+        retry = Retry(connect=5, backoff_factor=0.5, status_forcelist=[ 500, 502, 503, 504 ])
+        adapter = HTTPAdapter(max_retries=retry)
+        self._session.mount('http://', adapter)
+        self._session.mount('https://', adapter)
+        
         self._cache: Dict[str, Dict] = self._load()
 
     # ---------- cache persistence ----------

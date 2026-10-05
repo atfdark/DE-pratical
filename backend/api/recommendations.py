@@ -21,7 +21,7 @@ router = APIRouter(tags=["Recommendations"])
 )
 def get_recommendations_for_movie(
     movie_id: int,
-    top_k: int = Query(10, ge=1, le=50, description="Number of recommendations to retrieve")
+    top_k: int = Query(10, ge=1, le=100, description="Number of recommendations to retrieve")
 ):
     try:
         response = recommendation_service.get_recommendations(movie_id=movie_id, top_k=top_k)
